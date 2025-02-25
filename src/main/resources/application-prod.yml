@@ -1,0 +1,17 @@
+app:
+  server:
+    port: ${SERVER_PORT}
+  grpc:
+    port: ${GRPC_PORT}
+  database:
+    host: ${DB_HOST}
+    port: 5432
+    name: SweTimeTracking
+    schema: swetimetracking
+    username: ${DB_USER}
+    password: ${DB_PASS}
+  kafka:
+    host: localhost
+    port: 9092
+  config:
+    timezone: Asia/Ho_Chi_Minh
