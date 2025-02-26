@@ -4,9 +4,8 @@ import dev.ngdangkietswe.sweprotobufshared.common.protobuf.EmptyResp;
 import dev.ngdangkietswe.sweprotobufshared.common.protobuf.UpsertResp;
 import dev.ngdangkietswe.sweprotobufshared.proto.domain.SweGrpcPrincipal;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.ApproveOvertimeReq;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckInOutReq;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckInOutResp;
-import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckInReq;
-import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckOutReq;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.GetListTimeTrackingReq;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.GetListTimeTrackingResp;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.GetTimeTrackingReq;
@@ -20,9 +19,7 @@ import dev.ngdangkietswe.sweprotobufshared.timetracking.OverTimeReq;
 
 public interface ITimeTrackingGrpcService {
 
-    CheckInOutResp checkIn(CheckInReq req, SweGrpcPrincipal principal);
-
-    CheckInOutResp checkOut(CheckOutReq req, SweGrpcPrincipal principal);
+    CheckInOutResp checkInOut(CheckInOutReq req, SweGrpcPrincipal principal);
 
     GetListTimeTrackingResp getListTimeTracking(GetListTimeTrackingReq req, SweGrpcPrincipal principal);
 

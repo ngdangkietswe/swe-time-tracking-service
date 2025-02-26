@@ -54,4 +54,13 @@ public class TimeTrackingEntity extends BaseEntity {
 
     @Column
     private Double overTimeHours;
+
+    @Column
+    private Double latitude;
+
+    @Column
+    private Double longitude;
+
+    @Column
+    private String location;
 }

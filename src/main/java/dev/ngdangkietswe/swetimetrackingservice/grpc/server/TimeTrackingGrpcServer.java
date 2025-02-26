@@ -5,7 +5,16 @@ import dev.ngdangkietswe.sweprotobufshared.common.protobuf.UpsertResp;
 import dev.ngdangkietswe.sweprotobufshared.proto.common.GrpcUtil;
 import dev.ngdangkietswe.sweprotobufshared.proto.common.IGrpcServer;
 import dev.ngdangkietswe.sweprotobufshared.proto.security.SweGrpcServerInterceptor;
-import dev.ngdangkietswe.sweprotobufshared.timetracking.*;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.ApproveOvertimeReq;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckInOutReq;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckInOutResp;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.GetListTimeTrackingReq;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.GetListTimeTrackingResp;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.GetTimeTrackingReq;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.GetTimeTrackingResp;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.OverTimeReq;
+import dev.ngdangkietswe.sweprotobufshared.timetracking.TimeTrackingServiceGrpc;
+import dev.ngdangkietswe.swetimetrackingservice.grpc.service.ITimeTrackingGrpcService;
 import dev.ngdangkietswe.swetimetrackingservice.grpc.service.impl.TimeTrackingGrpcServiceImpl;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
@@ -20,26 +29,14 @@ import org.lognet.springboot.grpc.GRpcService;
 @RequiredArgsConstructor
 public class TimeTrackingGrpcServer extends TimeTrackingServiceGrpc.TimeTrackingServiceImplBase {
 
-    private final TimeTrackingGrpcServiceImpl timeTrackingGrpcService;
+    private final ITimeTrackingGrpcService timeTrackingGrpcService;
 
     @Override
-    public void checkIn(CheckInReq request, StreamObserver<CheckInOutResp> responseObserver) {
+    public void checkInOut(CheckInOutReq request, StreamObserver<CheckInOutResp> responseObserver) {
         IGrpcServer.execute(
                 request,
                 responseObserver,
-                timeTrackingGrpcService::checkIn,
-                exception -> CheckInOutResp.newBuilder()
-                        .setError(GrpcUtil.asError(exception))
-                        .build()
-        );
-    }
-
-    @Override
-    public void checkOut(CheckOutReq request, StreamObserver<CheckInOutResp> responseObserver) {
-        IGrpcServer.execute(
-                request,
-                responseObserver,
-                timeTrackingGrpcService::checkOut,
+                timeTrackingGrpcService::checkInOut,
                 exception -> CheckInOutResp.newBuilder()
                         .setError(GrpcUtil.asError(exception))
                         .build()
