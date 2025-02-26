@@ -4,6 +4,7 @@ import dev.ngdangkietswe.swejavacommonshared.utils.DateTimeUtil;
 import dev.ngdangkietswe.sweprotobufshared.common.protobuf.EmptyResp;
 import dev.ngdangkietswe.sweprotobufshared.common.protobuf.UpsertResp;
 import dev.ngdangkietswe.sweprotobufshared.proto.domain.SweGrpcPrincipal;
+import dev.ngdangkietswe.sweprotobufshared.proto.exception.GrpcNotFoundException;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.ApproveOvertimeReq;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckInOutReq;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.CheckInOutResp;
@@ -15,15 +16,24 @@ import dev.ngdangkietswe.sweprotobufshared.timetracking.OverTimeReq;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.protobuf.TimeTrackingStatus;
 import dev.ngdangkietswe.swetimetrackingservice.data.entity.CdcAuthUserEntity;
 import dev.ngdangkietswe.swetimetrackingservice.data.entity.TimeTrackingEntity;
+import dev.ngdangkietswe.swetimetrackingservice.data.repository.jpa.CdcAuthUserRepository;
 import dev.ngdangkietswe.swetimetrackingservice.data.repository.jpa.TimeTrackingRepository;
+import dev.ngdangkietswe.swetimetrackingservice.grpc.mapper.TimeTrackingGrpcMapper;
 import dev.ngdangkietswe.swetimetrackingservice.grpc.service.ITimeTrackingGrpcService;
+import dev.ngdangkietswe.swetimetrackingservice.grpc.validator.ITimeTrackingGrpcValidator;
+import dev.ngdangkietswe.swetimetrackingservice.kafka.payload.SendEmailReplyOvertimePayload;
+import dev.ngdangkietswe.swetimetrackingservice.kafka.payload.SendEmailRequestOvertimePayload;
+import dev.ngdangkietswe.swetimetrackingservice.kafka.producer.TimeTrackingKafkaProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
  * @author ngdangkietswe
@@ -35,7 +45,12 @@ import java.time.LocalDate;
 @Log4j2
 public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
 
+    private final TimeTrackingGrpcMapper timeTrackingGrpcMapper;
+    private final ITimeTrackingGrpcValidator timeTrackingGrpcValidator;
     private final TimeTrackingRepository timeTrackingRepository;
+    private final CdcAuthUserRepository cdcAuthUserRepository;
+
+    private final TimeTrackingKafkaProducer timeTrackingKafkaProducer;
 
     /**
      * Check in/out
@@ -84,9 +99,40 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
                 .build();
     }
 
+    /**
+     * Get list time tracking
+     *
+     * @param req       GetListTimeTrackingReq
+     * @param principal SweGrpcPrincipal
+     * @return GetListTimeTrackingResp
+     */
     @Override
     public GetListTimeTrackingResp getListTimeTracking(GetListTimeTrackingReq req, SweGrpcPrincipal principal) {
-        return null;
+        var respBuilder = timeTrackingGrpcValidator.validateGetListTimeTracking(req);
+        if (Objects.nonNull(respBuilder)) {
+            return respBuilder.build();
+        }
+
+        var startDate = StringUtils.isNotEmpty(req.getStartDate())
+                ? Date.valueOf(req.getStartDate())
+                : DateTimeUtil.firstDateOfMonth();
+
+        var endDate = StringUtils.isNotEmpty(req.getEndDate())
+                ? Date.valueOf(req.getEndDate())
+                : DateTimeUtil.lastDateOfMonth();
+
+        var timeTrackings = timeTrackingRepository.findAllByUserIdAndDateIsGreaterThanEqualAndDateIsLessThanEqual(
+                principal.getUserId(),
+                startDate,
+                endDate
+        );
+
+        return GetListTimeTrackingResp.newBuilder()
+                .setSuccess(true)
+                .setData(GetListTimeTrackingResp.Data.newBuilder()
+                        .addAllTimeTrackings(timeTrackingGrpcMapper.toGrpcMessages(timeTrackings))
+                        .build())
+                .build();
     }
 
     @Override
@@ -94,13 +140,66 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
         return null;
     }
 
+    /**
+     * Overtime
+     *
+     * @param req       OvertimeReq
+     * @param principal SweGrpcPrincipal
+     * @return UpsertResp
+     */
     @Override
     public UpsertResp overtime(OverTimeReq req, SweGrpcPrincipal principal) {
-        return null;
+        var respBuilder = timeTrackingGrpcValidator.validateOvertime(req);
+        if (Objects.nonNull(respBuilder)) {
+            return respBuilder.build();
+        }
+
+        var timeTracking = timeTrackingRepository.findByIdAndUserId(UUID.fromString(req.getId()), principal.getUserId())
+                .orElseThrow(() -> new GrpcNotFoundException(TimeTrackingEntity.class, "id", req.getId()));
+
+        var approver = cdcAuthUserRepository.findById(UUID.fromString(req.getApproverId()))
+                .orElseThrow(() -> new GrpcNotFoundException(CdcAuthUserEntity.class, "id", req.getApproverId()));
+
+        // Send email to approver for overtime request
+        timeTrackingKafkaProducer.sendEmailRequestOvertime(SendEmailRequestOvertimePayload.builder()
+                .date(timeTracking.getDate().toString())
+                .requester(principal.getUsername())
+                .approverEmail(approver.getEmail())
+                .totalHours(req.getOvertimeHours())
+                .reason(req.getReason())
+                .build());
+
+        return UpsertResp.newBuilder()
+                .setSuccess(true)
+                .setData(UpsertResp.Data.newBuilder()
+                        .setId(timeTracking.getId().toString())
+                        .build())
+                .build();
     }
 
     @Override
     public EmptyResp approveOvertime(ApproveOvertimeReq req, SweGrpcPrincipal principal) {
-        return null;
+        var timeTracking = timeTrackingRepository.findByIdFetchUser(UUID.fromString(req.getId()))
+                .orElseThrow(() -> new GrpcNotFoundException(TimeTrackingEntity.class, "id", req.getId()));
+
+        if (req.getIsApproved()) {
+            timeTracking.setOverTime(true);
+            timeTracking.setOverTimeHours(req.getOvertimeHours());
+            timeTracking.preUpdate(principal.getUserId());
+            timeTrackingRepository.save(timeTracking);
+        }
+
+        // Send email to requester for overtime request
+        timeTrackingKafkaProducer.sendEmailReplyOvertime(SendEmailReplyOvertimePayload.builder()
+                .date(timeTracking.getDate().toString())
+                .approver(principal.getUsername())
+                .requesterEmail(timeTracking.getUser().getEmail())
+                .isApproved(req.getIsApproved())
+                .reason(req.getReason())
+                .build());
+
+        return EmptyResp.newBuilder()
+                .setSuccess(true)
+                .build();
     }
 }

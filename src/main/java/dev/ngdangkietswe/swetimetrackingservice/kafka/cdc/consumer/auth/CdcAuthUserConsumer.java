@@ -22,7 +22,7 @@ public class CdcAuthUserConsumer extends CdcBaseConsumer<CdcAuthUserPayload, Cdc
     }
 
     @KafkaListener(
-            topics = KafkaConstant.CDC_AUTH_USER_TOPIC,
+            topics = KafkaConstant.TOPIC_CDC_AUTH_USERS,
             containerFactory = KafkaConstant.STRING_LISTENER_CONTAINER_FACTORY)
     public void consume(ConsumerRecord<String, String> record) {
         accept(record);
