@@ -23,6 +23,7 @@ public class SendEmailRequestOvertimePayload implements Serializable {
 
     private String date;
     private String requester;
+    private String approver;
     @JsonProperty("approver_email")
     private String approverEmail;
     @JsonProperty("total_hours")

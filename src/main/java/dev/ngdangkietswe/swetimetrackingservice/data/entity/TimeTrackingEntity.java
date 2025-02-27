@@ -49,11 +49,9 @@ public class TimeTrackingEntity extends BaseEntity {
     @Column
     private int status = 1;
 
-    @Column
-    private boolean isOverTime;
+    private boolean isOvertime;
 
-    @Column
-    private Double overTimeHours;
+    private Double overtimeHours;
 
     @Column
     private Double latitude;

@@ -6,6 +6,7 @@ import dev.ngdangkietswe.sweprotobufshared.timetracking.protobuf.TimeTracking;
 import dev.ngdangkietswe.sweprotobufshared.timetracking.protobuf.TimeTrackingStatus;
 import dev.ngdangkietswe.swetimetrackingservice.data.entity.TimeTrackingEntity;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -27,8 +28,11 @@ public class TimeTrackingGrpcMapper extends GrpcMapper<TimeTrackingEntity, TimeT
                 .setCheckInTime(DateTimeUtil.timestampAsStringWithDefaultZone(from.getCheckInTime()))
                 .setCheckOutTime(DateTimeUtil.timestampAsStringWithDefaultZone(from.getCheckOutTime()))
                 .setStatus(TimeTrackingStatus.forNumber(from.getStatus()))
-                .setIsOvertime(from.isOverTime())
-                .setOvertimeHours(ObjectUtils.defaultIfNull(from.getOverTimeHours(), 0.0));
+                .setIsOvertime(from.isOvertime())
+                .setOvertimeHours(ObjectUtils.defaultIfNull(from.getOvertimeHours(), 0.0))
+                .setLatitude(ObjectUtils.defaultIfNull(from.getLatitude(), 0.0))
+                .setLongitude(ObjectUtils.defaultIfNull(from.getLongitude(), 0.0))
+                .setLocation(StringUtils.defaultString(from.getLocation()));
     }
 
     @Override

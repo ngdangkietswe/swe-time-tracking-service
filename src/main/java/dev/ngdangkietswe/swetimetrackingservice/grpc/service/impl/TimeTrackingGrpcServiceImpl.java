@@ -1,6 +1,8 @@
 package dev.ngdangkietswe.swetimetrackingservice.grpc.service.impl;
 
+import dev.ngdangkietswe.swejavacommonshared.constants.CommonConstant;
 import dev.ngdangkietswe.swejavacommonshared.utils.DateTimeUtil;
+import dev.ngdangkietswe.swejavacommonshared.utils.RestTemplateUtil;
 import dev.ngdangkietswe.sweprotobufshared.common.protobuf.EmptyResp;
 import dev.ngdangkietswe.sweprotobufshared.common.protobuf.UpsertResp;
 import dev.ngdangkietswe.sweprotobufshared.proto.domain.SweGrpcPrincipal;
@@ -24,7 +26,9 @@ import dev.ngdangkietswe.swetimetrackingservice.grpc.validator.ITimeTrackingGrpc
 import dev.ngdangkietswe.swetimetrackingservice.kafka.payload.SendEmailReplyOvertimePayload;
 import dev.ngdangkietswe.swetimetrackingservice.kafka.payload.SendEmailRequestOvertimePayload;
 import dev.ngdangkietswe.swetimetrackingservice.kafka.producer.TimeTrackingKafkaProducer;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -51,6 +55,44 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
     private final CdcAuthUserRepository cdcAuthUserRepository;
 
     private final TimeTrackingKafkaProducer timeTrackingKafkaProducer;
+    private final RestTemplateUtil restTemplateUtil;
+
+    @Getter
+    @Setter
+    public static class LocationResp {
+        public double latitude;              // Latitude from the response
+        public double longitude;             // Longitude from the response
+        public String city;                  // City name (e.g., "New York")
+        public String countryName;           // Country name (e.g., "United States")
+        public String countryCode;           // ISO country code (e.g., "US")
+        public String locality;              // More specific area (e.g., neighborhood)
+        public String principalSubdivision;  // State or province (e.g., "New York")
+        public String postcode;              // Postal code (e.g., "10007")
+
+        /**
+         * Get the full location string
+         * Ex: "New York, New York, United States"
+         *
+         * @return Full location string
+         */
+        public String getFullLocation() {
+            StringBuilder fullLocation = new StringBuilder();
+
+            if (StringUtils.isNotEmpty(locality)) {
+                fullLocation.append(locality);
+            }
+
+            if (StringUtils.isNotEmpty(city)) {
+                fullLocation.append(", ").append(city);
+            }
+
+            if (StringUtils.isNotEmpty(countryName)) {
+                fullLocation.append(", ").append(countryName);
+            }
+
+            return StringUtils.defaultIfEmpty(fullLocation.toString(), "Unknown location");
+        }
+    }
 
     /**
      * Check in/out
@@ -81,9 +123,20 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
                         }
                 );
 
-        timeTracking.setLatitude(req.getLatitude());
-        timeTracking.setLongitude(req.getLongitude());
-        timeTracking.setLocation(null); // TODO: Implement calculate lat/long to location
+        // Get location information if latitude and longitude are provided
+        if (req.getLatitude() > 0 && req.getLongitude() > 0) {
+            timeTracking.setLatitude(req.getLatitude());
+            timeTracking.setLongitude(req.getLongitude());
+
+            var locationResp = restTemplateUtil.get(
+                    String.format(CommonConstant.BIG_DATA_CLOUD_URL, req.getLatitude(), req.getLongitude()),
+                    LocationResp.class
+            );
+
+            if (Objects.nonNull(locationResp.getBody())) {
+                timeTracking.setLocation(locationResp.getBody().getFullLocation());
+            }
+        }
 
         timeTrackingRepository.save(timeTracking);
 
@@ -95,6 +148,7 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
                         .setCheckInTime(DateTimeUtil.timestampAsStringWithDefaultZone(timeTracking.getCheckInTime()))
                         .setCheckOutTime(DateTimeUtil.timestampAsStringWithDefaultZone(timeTracking.getCheckOutTime()))
                         .setStatus(TimeTrackingStatus.forNumber(timeTracking.getStatus()))
+                        .setLocation(timeTracking.getLocation())
                         .build())
                 .build();
     }
@@ -164,6 +218,7 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
         timeTrackingKafkaProducer.sendEmailRequestOvertime(SendEmailRequestOvertimePayload.builder()
                 .date(timeTracking.getDate().toString())
                 .requester(principal.getUsername())
+                .approver(approver.getUsername())
                 .approverEmail(approver.getEmail())
                 .totalHours(req.getOvertimeHours())
                 .reason(req.getReason())
@@ -183,8 +238,8 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
                 .orElseThrow(() -> new GrpcNotFoundException(TimeTrackingEntity.class, "id", req.getId()));
 
         if (req.getIsApproved()) {
-            timeTracking.setOverTime(true);
-            timeTracking.setOverTimeHours(req.getOvertimeHours());
+            timeTracking.setOvertime(true);
+            timeTracking.setOvertimeHours(req.getOvertimeHours());
             timeTracking.preUpdate(principal.getUserId());
             timeTrackingRepository.save(timeTracking);
         }
@@ -193,6 +248,7 @@ public class TimeTrackingGrpcServiceImpl implements ITimeTrackingGrpcService {
         timeTrackingKafkaProducer.sendEmailReplyOvertime(SendEmailReplyOvertimePayload.builder()
                 .date(timeTracking.getDate().toString())
                 .approver(principal.getUsername())
+                .requester(timeTracking.getUser().getUsername())
                 .requesterEmail(timeTracking.getUser().getEmail())
                 .isApproved(req.getIsApproved())
                 .reason(req.getReason())
